@@ -17,5 +17,4 @@ sortN q | PQ.null q = []
             in x:sortN q1
 
 mergeN :: Ord a => [[a]] -> [a]
-mergeN xss = let q = foldr tryInsert PQ.empty xss in sortN q
-        
+mergeN = sortN . foldr tryInsert PQ.empty
