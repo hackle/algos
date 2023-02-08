@@ -10,11 +10,11 @@ main = putStrLn "Hello, Haskell!"
 tryInsert [] = id
 tryInsert xs@(x:_) = PQ.insert x xs
 
-sortN q | PQ.null q = []
+mergeN q | PQ.null q = []
         | otherwise =
             let (_, x:xs) = PQ.findMin q
                 q1 = PQ.deleteMin q & tryInsert xs
-            in x:sortN q1
+            in x:mergeN q1
 
-mergeN :: Ord a => [[a]] -> [a]
-mergeN = sortN . foldr tryInsert PQ.empty
+sortN :: Ord a => [[a]] -> [a]
+sortN = mergeN . foldr tryInsert PQ.empty
