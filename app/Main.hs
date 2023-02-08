@@ -11,7 +11,7 @@ tryInsert [] = id
 tryInsert xs@(x:_) = PQ.insert x xs
 
 mergeN q | PQ.null q = []
-        | otherwise =
+         | otherwise =
             let (_, x:xs) = PQ.findMin q
                 q1 = PQ.deleteMin q & tryInsert xs
             in x:mergeN q1
