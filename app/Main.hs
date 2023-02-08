@@ -10,12 +10,12 @@ main = putStrLn "Hello, Haskell!"
 tryInsert [] = id
 tryInsert xs@(x:_) = PQ.insert x xs
 
-mergeN :: Ord a => [[a]] -> [a]
-mergeN xss = go initQ
-    where
-        initQ = foldr tryInsert PQ.empty xss
-        go q =
-            if PQ.null q then [] else
+sortN q | PQ.null q = []
+        | otherwise =
             let (_, x:xs) = PQ.findMin q
-                q1 = PQ.deleteMin q & tryInsert xs & PQ.filter (not.null)
-            in x:go q1
+                q1 = PQ.deleteMin q & tryInsert xs
+            in x:sortN q1
+
+mergeN :: Ord a => [[a]] -> [a]
+mergeN xss = let q = foldr tryInsert PQ.empty xss in sortN q
+        
