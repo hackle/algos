@@ -2,6 +2,8 @@ module Main where
 
 import qualified Data.PQueue.Prio.Min as PQ
 import Data.Function ((&))
+import Data.List (find)
+import Control.Monad
 
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
@@ -18,3 +20,34 @@ mergeN q | PQ.null q = []
 
 sortN :: Ord a => [[a]] -> [a]
 sortN = mergeN . foldr tryInsert PQ.empty
+
+-- cycle detector
+-- ghci> floyd []
+-- Nothing
+-- ghci> floyd [6..25]
+-- Nothing
+-- ghci> floyd $ concat $ repeat [6..25]
+-- Just 6
+-- ghci> floyd $ 1:2:3:4:5:(concat $ repeat [6..25])
+-- Just 6
+floyd :: Eq a => [a] -> Maybe a
+floyd xs = do
+    met <- race1 xs xs
+    race2 xs met
+
+race1 (x:xs) (_:y:ys) | x == y    = Just ys
+                      | otherwise = race1 xs ys
+race1 _ _ = Nothing
+
+race2 (x:xs) (y:ys) | y == x    = Just y
+                    | otherwise = race2 xs ys
+race2 _ _ = Nothing
+
+-- or zip
+
+-- alternatives
+floyd1 xs = race1 xs xs >>= race2 xs
+
+floyd2 xs = race2 xs =<< race1 xs xs
+
+floyd3 xs = xs & (race1 xs >=> race2 xs)
