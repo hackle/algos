@@ -1,7 +1,8 @@
 {-# LANGUAGE TupleSections #-}
 
+module Algo.State where
+    
 import Control.Monad
--- module State where
 
 
 -- newtype State s a = St (s -> (s, a))
