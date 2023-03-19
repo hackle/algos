@@ -5,6 +5,9 @@ import Debug.Trace ()
 import Data.Tuple (swap)
 import qualified Data.Map.Strict as M
 
+type Max = Int
+type Count = Int
+
 toMapIndexed :: [Int] -> M.Map Int Int
 toMapIndexed xs = M.fromList $ zip [0..] xs
 
@@ -12,18 +15,20 @@ sanitise :: M.Map Int Int -> M.Map Int Int
 sanitise mp = 
     let reversed = M.fromList $ fmap swap (M.toList mp)
         rest = M.filterWithKey (\k _ -> k `M.member` reversed) mp
-    in if rest == mp then mp else sanitise rest
+    in if rest == mp 
+        then mp 
+        else sanitise rest
 
-tryWalk :: Int -> Int -> State (M.Map Int Int) Int
-tryWalk k cnt = do
+walk1 :: Int -> Count -> State (M.Map Int Int) Max
+walk1 k cnt = do
     mp <- getState
     case k `M.lookup` mp of
         Nothing -> return cnt   -- must have finished the loop; input gurantees to have loops
         Just k1 -> do
             modifyState (M.delete k)
-            tryWalk k1 (cnt + 1)
+            walk1 k1 (cnt + 1)
 
-walkOn :: State (M.Map Int Int) Int
+walkOn :: State (M.Map Int Int) Max
 walkOn = go 0
     where 
         go mx = do
@@ -32,10 +37,10 @@ walkOn = go 0
                 then return mx
                 else do
                     let (k, a) = 0 `M.elemAt` mp
-                    mx1 <- tryWalk k 1
+                    mx1 <- walk1 k 1
                     go (max mx mx1)
 
-longestCycle :: [Int] -> Int
+longestCycle :: [Int] -> Max
 longestCycle xs = 
     let pairs = sanitise (toMapIndexed xs)
         (maxLength, _) = let (State f) = walkOn in f pairs
