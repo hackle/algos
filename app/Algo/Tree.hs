@@ -6,6 +6,11 @@ import Data.List.Split
 
 data Tree a = Empty | Node a (Tree a) (Tree a) deriving (Eq, Show, Functor)
 
+slicesPow2 xs = foldl take1 ([], xs) [2 ^ n | n <- [0..]]
+    where 
+        take1 (ys, []) _ = (ys, [])
+        take1 (ys, rest) n = let (taken, rest') = splitAt n rest in (ys ++ [taken], rest')
+
 toLeaf Nothing = Empty
 toLeaf (Just a) = Node a Empty Empty
 
