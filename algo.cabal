@@ -36,5 +36,8 @@ executable algo
         base ^>=4.16.4.0
         , pqueue
         , containers
+        , parsec
+        , mtl
+        , split
     hs-source-dirs:   app
     default-language: Haskell2010

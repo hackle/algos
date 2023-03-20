@@ -76,4 +76,7 @@ compareLists [] _ = False
 digitSum n  | n <= 9 = n
             | otherwise = 
                 let (q, r) = n `divMod` 10
-                in  digitSum $ q + digitSum r
+                in  q + digitSum r      -- or: digitSum $ q + digitSum r 
+
+-- but this is better for separation
+final n = find (<= 9) $ iterate digitSum n
