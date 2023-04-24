@@ -28,6 +28,7 @@ executable algo
     other-modules:
         Algo.Cycle
         , Algo.State
+        , Algo.HighestColour
 
 
     -- LANGUAGE extensions used by modules in this package.
