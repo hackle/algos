@@ -41,10 +41,10 @@ highestColour colours adjancent =
             _counts = M.mapWithKey (\k _ -> M.fromList [(coloursIndexed M.! k, 1)]) loose }
 
 deleteFromIns :: Int -> [Int] -> M.Map Int (S.Set Int) -> M.Map Int (S.Set Int)
-deleteFromIns k xs ins = L.foldl delete1 ins xs
+deleteFromIns toDelete xs ins = L.foldl delete1 ins xs
     where
         toMaybe v = if S.null v then Nothing else Just v
-        delete1 ins k1 = M.update (toMaybe . S.delete k) k1 ins
+        delete1 ins k1 = M.update (toMaybe . S.delete toDelete) k1 ins
 
 solve ::
     M.Map Int [Int] -- outs
