@@ -13,80 +13,79 @@ import Control.Lens.TH
 import Control.Monad
 import Data.Function
 
+-- trace _ n = n
 
 type Colour = Char
 
 data CState = CState {
     _ins :: M.Map Int (S.Set Int)
     , _loose :: M.Map Int [Int]
-    , _maxes :: M.Map Int (M.Map Colour Int)
+    , _counts :: M.Map Int (M.Map Colour Int)
     } deriving (Eq, Show)
 
 $(makeLenses ''CState)
 
--- highestColour :: [Char] -> [[Int]] -> Int
+highestColour :: [Char] -> [[Int]] -> Int
 highestColour colours adjancent =
-    let coloursIndexed = M.fromList $ zip [0..] colours
+    let (State runSt) = solve outs coloursIndexed
+        (final, st1) = runSt st
+    in final
+    where
+        coloursIndexed = M.fromList $ zip [0..] colours
         outs = M.fromListWith (++) $ fmap (\[x, y] -> (x, [y])) adjancent
         ins = M.fromListWith S.union $ fmap (\[x, y] -> (y, S.singleton x)) adjancent
-        -- coloured = M.mapKeys (colours L.!!) loose
-        -- paths = M.mapWithKey (\k _ -> [[k]]) loose
         loose =  M.filterWithKey (\k _ -> not $ M.member k ins) outs
         st = CState {
             _ins = ins,
             _loose = loose,
-            _maxes = M.mapWithKey (\k _ -> M.fromList [(coloursIndexed M.! k, 1)]) loose }
-        (State runSt) = solve outs coloursIndexed
-        (final, st1) = runSt st
-    in --trace (show [ show ins, show outs, show loose, show finals ]) $ 
-        F.maximumBy (compare `on` F.maximum) (st1 ^. maxes)
+            _counts = M.mapWithKey (\k _ -> M.fromList [(coloursIndexed M.! k, 1)]) loose }
 
--- trace _ n = n
-
-delete1 :: Int -> [Int] -> M.Map Int (S.Set Int) -> M.Map Int (S.Set Int)
-delete1 k xs ins = L.foldl (flip (M.update (\v -> let v' = S.delete k v in if S.null v' then Nothing else Just v'))) ins xs
+deleteFromIns :: Int -> [Int] -> M.Map Int (S.Set Int) -> M.Map Int (S.Set Int)
+deleteFromIns k xs ins = L.foldl delete1 ins xs
+    where
+        toMaybe v = if S.null v then Nothing else Just v
+        delete1 ins k1 = M.update (toMaybe . S.delete k) k1 ins
 
 solve ::
     M.Map Int [Int] -- outs
     -> M.Map Int Char -- colours
-    -> State CState ()
+    -> State CState Int
 solve outs colours = do
     CState{_loose=loose1, _ins=ins} <- getState
-    modifyState (set loose M.empty)
-    _ <- M.traverseWithKey follow1 loose1
-        -- ins' = M.foldlWithKey delete1 ins loose
-     --trace (show ["Ins: " ++ show ins' ++ " Loose: " ++ show loose' ++ " Maxes: " ++ show maxes' ]) $
-    CState{_ins=ins'} <- getState
-    unless (M.null ins' || ins' == ins) $ -- stuck
-        -- trace ("Currently ins " ++ show ins' ++ " Loose " ++ show loose' ++ " Maxes: " ++ show maxes') $ 
-        solve outs colours
+    modifyState (loose .~ M.empty)
+    _ <- M.traverseWithKey followLoose loose1
+    CState{_ins=ins', _counts=cnts} <- getState
+    if M.null ins'
+        then return $ F.maximum (F.maximum <$> cnts)
+        else
+            if ins' == ins
+                then return (-1) -- stuck, will abort
+                else solve outs colours
     where
-        update1 ::
-            Int
-            -> Int
-            -> State CState ()
-        update1 k x = do
-            CState{_maxes=ms, _ins=ins2} <- getState
-            let mx2k = trace ("k:" ++ show k ++ " ms: " ++ show ms) $ ms M.! k
-                ms1 = M.insertWith (M.unionWith max) x (M.insertWith (+) (trace "colours" $ colours M.! x) 1 mx2k) ms
-            modifyState (set maxes ms1)
-            unless (x `M.member` ins2) $ -- not loose, still has incoming
-                when (x `M.member` outs) $  -- loose, still has outs
-                modifyState (over loose (M.insert x (outs M.! x)))
-                    -- else return () --modifyState (over maxes (M.delete x)) -- no outs, done
-        follow1 ::
-            Int -- node
-            -> [Int]    -- out values
-            -> State CState ()
-        follow1 k xs = do
-            modifyState (over ins (delete1 k xs))
-            mapM_ (update1 k) xs
-            -- modifyState (over maxes (M.delete k))
+        followLoose :: Int -> [Int] -> State CState ()
+        followLoose current nexts = do
+            modifyState (ins %~ deleteFromIns current nexts)
+            mapM_ (update1 outs colours current) nexts
 
+update1 ::
+    M.Map Int [Int] -- outs
+    -> M.Map Int Char -- colours
+    -> Int -> Int -> State CState ()
+update1 outs colours current next = do
+    CState{_counts=counts1, _ins=ins2} <- getState
+    let currentCounts = counts1 M.! current
+        nextCounts = M.insertWith (+) (colours M.! next) 1 currentCounts  -- for every node, update the colour count
+        counts2 = M.insertWith (M.unionWith max) next nextCounts counts1
+    modifyState (counts .~ counts2)
+    unless (next `M.member` ins2) $ -- not loose, still has incoming
+         -- not loose, still has incoming
+        when (next `M.member` outs) $  -- loose, still has outs
+        modifyState (loose %~ M.insert next (outs M.! next))
 
 
 
 -- highestColour "abaca" [[0,1],[0,2],[2,3],[3,4]] -- 3 
+-- highestColour "abaca" [[0,1],[0,2],[2,3],[3,4],[4,0]] == -1
 -- highestColour "bbbhb" [[0,2],[3,0],[1,3],[4,1]] -- 4
 -- highestColour "nnllnzznn" [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[5,6],[6,7],[7,8]] -- 5
 -- highestColour "eeyyeeyeye" [[0,1],[1,2],[2,3],[3,4],[4,5],[4,6],[5,7],[6,8],[8,9]] -- 5
