@@ -100,7 +100,7 @@ function largestPathValue(colors: string, edges: number[][]): number {
 
 // console.log(largestPathValue("abaca", [[0,1],[0,2],[2,3],[3,4]]) == 3)
 // console.log(largestPathValue("bbbhb", [[0,2],[3,0],[1,3],[4,1]]) == 4)
-// console.log(largestPathValue("nnllnzznn", [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[3,6],[5,6],[6,7],[7,8]]) == 5)
+// console.log(largestPathValue("nnllnzznn", [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[5,6],[6,7],[7,8]]) == 5)
 // console.log(largestPathValue("nnlnnnznnn", [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[3,4],[5,8],[5,7],[5,6],[6,7],[7,8],[8,9]]) == 7)
 // console.log(largestPathValue("nnlnnnznn", [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[3,6],[5,6],[6,7],[7,8]]) == 6)
 // console.log(largestPathValue("nnnzznnnn", [[0,1],[1,2],[2,3],[2,4],[3,5],[4,6],[3,4],[5,6],[6,7],[7,8]]) == 7)
