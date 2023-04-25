@@ -53,7 +53,7 @@ solve ::
 solve outs colours = do
     CState{_loose=loose1, _ins=ins} <- getState
     modifyState (loose .~ M.empty)
-    _ <- M.traverseWithKey followLoose loose1
+    _ <- M.traverseWithKey followBranch loose1
     CState{_ins=ins', _counts=cnts} <- getState
     if M.null ins'
         then return $ F.maximum (F.maximum <$> cnts)
@@ -62,19 +62,22 @@ solve outs colours = do
                 then return (-1) -- stuck, will abort
                 else solve outs colours
     where
-        followLoose :: Int -> [Int] -> State CState ()
-        followLoose current nexts = do
+        followBranch :: Int -> [Int] -> State CState ()
+        followBranch current nexts = do
             modifyState (ins %~ deleteFromIns current nexts)
-            mapM_ (update1 outs colours current) nexts
+            mapM_ (updateBranch outs colours current) nexts
 
-update1 ::
+updateBranch ::
     M.Map Int [Int] -- outs
     -> M.Map Int Char -- colours
     -> Int -> Int -> State CState ()
-update1 outs colours current next = do
+updateBranch outs colours current next = do
     CState{_counts=counts1, _ins=ins2} <- getState
+    -- key part
+    -- update the next nodes with colour counts
+    -- in case of key conflict, merge the counts alway taking max values for the same colour
     let currentCounts = counts1 M.! current
-        nextCounts = M.insertWith (+) (colours M.! next) 1 currentCounts  -- for every node, update the colour count
+        nextCounts = M.insertWith (+) (colours M.! next) 1 currentCounts 
         counts2 = M.insertWith (M.unionWith max) next nextCounts counts1
     modifyState (counts .~ counts2)
     unless (next `M.member` ins2) $ -- not loose, still has incoming
