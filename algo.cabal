@@ -40,5 +40,6 @@ executable algo
         , parsec
         , mtl
         , split
+        , lens
     hs-source-dirs:   app
     default-language: Haskell2010

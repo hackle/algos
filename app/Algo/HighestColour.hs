@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Algo.HighestColour where
 
 import qualified Data.Map.Strict as M
@@ -5,78 +7,81 @@ import qualified Data.Set as S
 import qualified Data.List as L
 import Debug.Trace
 import qualified Data.Foldable as F
+import Algo.State
+import Control.Lens
+import Control.Lens.TH
+import Control.Monad
+import Data.Function
+
+
+type Colour = Char
+
+data CState = CState {
+    _ins :: M.Map Int (S.Set Int)
+    , _loose :: M.Map Int [Int]
+    , _maxes :: M.Map Int (M.Map Colour Int)
+    } deriving (Eq, Show)
+
+$(makeLenses ''CState)
 
 -- highestColour :: [Char] -> [[Int]] -> Int
 highestColour colours adjancent =
     let coloursIndexed = M.fromList $ zip [0..] colours
         outs = M.fromListWith (++) $ fmap (\[x, y] -> (x, [y])) adjancent
         ins = M.fromListWith S.union $ fmap (\[x, y] -> (y, S.singleton x)) adjancent
-        loose = M.filterWithKey (\k _ -> not $ M.member k ins) outs
-        coloured = M.mapKeys (colours L.!!) loose
-        paths = M.mapWithKey (\k _ -> [[k]]) loose
-        maxes = M.mapWithKey (\k _ -> M.fromList [(coloursIndexed M.! k, 1)]) loose
-        finals = solve coloursIndexed ins outs loose maxes (-1)
+        -- coloured = M.mapKeys (colours L.!!) loose
+        -- paths = M.mapWithKey (\k _ -> [[k]]) loose
+        loose =  M.filterWithKey (\k _ -> not $ M.member k ins) outs
+        st = CState {
+            _ins = ins,
+            _loose = loose,
+            _maxes = M.mapWithKey (\k _ -> M.fromList [(coloursIndexed M.! k, 1)]) loose }
+        (State runSt) = solve outs coloursIndexed
+        (final, st1) = runSt st
     in --trace (show [ show ins, show outs, show loose, show finals ]) $ 
-        finals
+        F.maximumBy (compare `on` F.maximum) (st1 ^. maxes)
 
 -- trace _ n = n
 
-
-countMax :: String -> [Int] -> Int
-countMax colours indice = F.maximum $ M.fromListWith (+) $ [ (colours L.!! x, 1) | x <- indice ]
-
-delete1 :: M.Map Int (S.Set Int) -> Int -> [Int] -> M.Map Int (S.Set Int)
-delete1 ins k = L.foldl (flip (M.update (\v -> let v' = S.delete k v in if S.null v' then Nothing else Just v'))) ins
-
-
-extract :: M.Map Char Int -> Int
-extract = F.maximum
+delete1 :: Int -> [Int] -> M.Map Int (S.Set Int) -> M.Map Int (S.Set Int)
+delete1 k xs ins = L.foldl (flip (M.update (\v -> let v' = S.delete k v in if S.null v' then Nothing else Just v'))) ins xs
 
 solve ::
-    M.Map Int Char -- colours
-    -> M.Map Int (S.Set Int) -- ins
-    -> M.Map Int [Int] -- outs
-    -> M.Map Int [Int] -- loose
-    -> M.Map Int (M.Map Char Int) -- maxes
-    -- -> Int -- done
-    -> Int   -- done
-    -> Int
-solve colours ins outs loose maxes done =
-    let (loose', ins', maxes', done') = M.foldlWithKey follow1 (M.empty, ins, maxes, done) loose
+    M.Map Int [Int] -- outs
+    -> M.Map Int Char -- colours
+    -> State CState ()
+solve outs colours = do
+    CState{_loose=loose1, _ins=ins} <- getState
+    modifyState (set loose M.empty)
+    _ <- M.traverseWithKey follow1 loose1
         -- ins' = M.foldlWithKey delete1 ins loose
-    in --trace (show ["Ins: " ++ show ins' ++ " Loose: " ++ show loose' ++ " Maxes: " ++ show maxes' ]) $
-        if M.null ins'
-            then done'
-            else
-                if ins' == ins -- stuck
-                    then trace "It's stuck, giving up" (-1)
-                    else trace ("Currently ins " ++ show ins' ++ " Loose " ++ show loose' ++ " Maxes: " ++ show maxes') $ 
-                            solve colours ins' outs loose' maxes' done'
+     --trace (show ["Ins: " ++ show ins' ++ " Loose: " ++ show loose' ++ " Maxes: " ++ show maxes' ]) $
+    CState{_ins=ins'} <- getState
+    unless (M.null ins' || ins' == ins) $ -- stuck
+        -- trace ("Currently ins " ++ show ins' ++ " Loose " ++ show loose' ++ " Maxes: " ++ show maxes') $ 
+        solve outs colours
     where
-        -- increColour k = M.insertWith (1 +) (colours L.!! k) 1
         update1 ::
             Int
-            -> M.Map Int (S.Set Int)
-            -> (M.Map Int [Int], M.Map Int (M.Map Char Int), Int)
-            -> Int -> (M.Map Int [Int], M.Map Int (M.Map Char Int), Int)
-        update1 k ins2 (ls, ms, dn) x =
-            let mx2k = ms M.! k
-                ms1 = M.insertWith (M.unionWith max) x (M.insertWith (+) (colours M.! x) 1 mx2k) ms
-            in if x `M.member` ins2 -- not loose, still has incoming
-                        then (ls, ms1, dn)
-                        else if x `M.member` outs   -- loose, still has outs
-                                then (M.insert x (outs M.! x) ls, ms1, dn)
-                                else (ls, M.delete x ms1, L.foldl' max dn (ms1 M.! x)) -- no outs, done
-        follow1 ::
-            (M.Map Int [Int], M.Map Int (S.Set Int), M.Map Int (M.Map Char Int), Int)
             -> Int
-            -> [Int]
-            -> (M.Map Int [Int], M.Map Int (S.Set Int), M.Map Int (M.Map Char Int), Int)
-        follow1 (loose1, ins1, maxes1, done1) k xs =
-            let ins2 = delete1 ins1 k xs
-                        -- ps1 = L.foldl (\st p -> M.insertWith (++) x [x:p] st) ps pathsToK
-                (loose2, maxes2, done2) = L.foldl (update1 k ins2) (loose1, maxes1, done1) xs
-            in (loose2, ins2, M.delete k maxes2, done2)
+            -> State CState ()
+        update1 k x = do
+            CState{_maxes=ms, _ins=ins2} <- getState
+            let mx2k = trace ("k:" ++ show k ++ " ms: " ++ show ms) $ ms M.! k
+                ms1 = M.insertWith (M.unionWith max) x (M.insertWith (+) (trace "colours" $ colours M.! x) 1 mx2k) ms
+            modifyState (set maxes ms1)
+            unless (x `M.member` ins2) $ -- not loose, still has incoming
+                when (x `M.member` outs) $  -- loose, still has outs
+                modifyState (over loose (M.insert x (outs M.! x)))
+                    -- else return () --modifyState (over maxes (M.delete x)) -- no outs, done
+        follow1 ::
+            Int -- node
+            -> [Int]    -- out values
+            -> State CState ()
+        follow1 k xs = do
+            modifyState (over ins (delete1 k xs))
+            mapM_ (update1 k) xs
+            -- modifyState (over maxes (M.delete k))
 
 
 
