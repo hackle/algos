@@ -300,3 +300,20 @@ doubleGreetM' (greeting, name) = do
     return (greeting, name, greetings !! st)
 
 highGreetM' = greetM' >=> doubleGreetM'
+
+
+-- type Error = String
+
+-- getData :: Int -> Either DataError Int
+-- getData n = Left "Fails"
+
+-- serviceFn :: (Int, Int) -> Either ServiceError Int
+-- serviceFn (_, id) = do
+--     res = getData id
+--     setData (res + 1)
+    
+-- presenter :: Int -> HttpResponse
+-- presenter req =
+--     case serviceFn req of
+--         Left err -> setStatus 400 (err.ToJSON())
+--         Right res -> jsonify res
