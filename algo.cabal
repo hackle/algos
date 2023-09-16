@@ -29,6 +29,7 @@ executable algo
         Algo.Cycle
         , Algo.State
         , Algo.HighestColour
+        , Algo.CatAndMouse
 
 
     -- LANGUAGE extensions used by modules in this package.
@@ -41,5 +42,9 @@ executable algo
         , mtl
         , split
         , lens
+        , composition-prelude
+        , matrix
+        , lens
+        , newtype
     hs-source-dirs:   app
     default-language: Haskell2010
