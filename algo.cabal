@@ -30,12 +30,13 @@ executable algo
         , Algo.State
         , Algo.HighestColour
         , Algo.CatAndMouse
+        , Algo.HexToBase64
 
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:    
-        base ^>=4.16.4.0
+        base
         , pqueue
         , containers
         , parsec
@@ -46,5 +47,10 @@ executable algo
         , matrix
         , lens
         , newtype
+        , digits
+        , base64-bytestring
+        , hex
+        , bytestring
+        , extra
     hs-source-dirs:   app
     default-language: Haskell2010
