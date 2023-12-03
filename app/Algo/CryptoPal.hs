@@ -24,6 +24,8 @@ import GHC.Utils.Misc (fstOf3, sndOf3, thdOf3)
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types
 import Crypto.Error
+import Control.Applicative
+import Data.Composition
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -124,12 +126,17 @@ breakRepeatingKeyXor keySizes =
         (key:_) -> Just $ fromHexWith chr $ repeatingKeyXor cypherText key    
 
 aesEcbDecode :: String -> String -> String
-aesEcbDecode txt key = BT.unpack $ ecbDecrypt cipher (BT.pack txt)
+aesEcbDecode key txt = BT.unpack $ ecbDecrypt cipher (BT.pack txt)
     where 
         cipher :: AES128
         cipher = let (CryptoPassed c) = cipherInit (BT.pack key) in c
 
-solved7 = aesEcbDecode aesEcbText "YELLOW SUBMARINE"
+aesEcbDecodeBits :: [Int] -> [Int] -> [Int]
+aesEcbDecodeBits =  
+    let decodeBits = aesEcbDecode `on` (fmap chr)
+    in fmap ord .* decodeBits
+
+solved7 = aesEcbDecode "YELLOW SUBMARINE" aesEcbText
 
 -- 8
 hasDuplicates blockSize xxs =
@@ -139,3 +146,24 @@ hasDuplicates blockSize xxs =
 solved8 = 
     let bytes = aside hex2chars <$> ecbEncodedHex
     in filter (hasDuplicates 16 . snd) bytes
+
+-- 9
+padr l p xs =
+    xs ++ take (l - length xs) (repeat p)
+solved9 = padr 20 '\x04' "YELLOW SUBMARINE" == "YELLOW SUBMARINE\x04\x04\x04\x04"
+
+-- 10
+cbcDecode :: [Int] -> [Int] -> [Int]
+cbcDecode key txt =
+    let blockSize = length key
+        iv = take blockSize $ repeat (ord '\x00')
+        chunks = chunksOf blockSize $ txt
+        decode1 cipher vec = 
+            let dec = aesEcbDecodeBits key cipher
+            in zipWith xor dec vec
+        decoded = zipWith decode1 chunks (iv:chunks)
+    in concat decoded
+
+solved10 = 
+    let d = cbcDecode `on` (fmap ord) 
+    in fmap chr $ d "YELLOW SUBMARINE" cbcCipherText
