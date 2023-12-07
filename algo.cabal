@@ -58,5 +58,6 @@ executable algo
         , ghc
         , cryptonite
         , composition
+        , random
     hs-source-dirs:   app
     default-language: Haskell2010

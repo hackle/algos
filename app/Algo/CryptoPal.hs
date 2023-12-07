@@ -25,6 +25,9 @@ import Crypto.Cipher.Types
 import Crypto.Error
 import Control.Applicative
 import Data.Composition
+import System.Random
+import Control.Monad
+import Debug.Trace
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -102,9 +105,10 @@ int2bits ns = pad 8 '0' $ showIntAtBase 2 intToDigit ns ""
 str2bits = concatMap (int2bits . ord)
 
 hamming :: Eq a => [a] -> [a] -> Maybe Int
-hamming (_:_) [] = Nothing
-hamming [] (_:_) = Nothing
-hamming xs ys = Just $ length $ filter id $ zipWith (/=) xs ys
+hamming xs ys =
+    if ((==) `on` length) xs ys
+        then Just $ length $ filter id $ zipWith (/=) xs ys
+        else Nothing
 
 hamming' :: String -> String -> Maybe Int
 hamming' = hamming `on` str2bits
@@ -129,18 +133,18 @@ breakRepeatingKeyXor keySizes =
         [] -> Nothing
         (key:_) -> Just $ fromHexWith chr $ repeatingKeyXor cypherText key
 
-aesEcbDecode :: String -> String -> String
-aesEcbDecode key txt = BT.unpack $ ecbDecrypt cipher (BT.pack txt)
+ecbCodec codec key txt = BT.unpack $ codec cipher (BT.pack txt)
     where
         cipher :: AES128
         cipher = let (CryptoPassed c) = cipherInit (BT.pack key) in c
 
-aesEcbDecodeBits :: [Int] -> [Int] -> [Int]
-aesEcbDecodeBits =
-    let decodeBits = aesEcbDecode `on` fmap chr
-    in fmap ord .* decodeBits
+ecbDecode = ecbCodec ecbDecrypt
+ecbEncode = ecbCodec ecbEncrypt
 
-solved7 = aesEcbDecode "YELLOW SUBMARINE" aesEcbText
+ecbDecodeBits = fmap ord .* ecbDecode `on` fmap chr
+ecbEncodeBits = fmap ord .* ecbEncode `on` fmap chr
+
+solved7 = ecbDecode "YELLOW SUBMARINE" aesEcbText
 
 -- 8
 hasDuplicates blockSize xxs =
@@ -154,19 +158,72 @@ solved8 =
 -- 9
 padr l p xs =
     xs ++ replicate (l - length xs) p
+
+padBlocks blockSize xs =
+    let compl = negate (length xs) `mod` blockSize
+    in xs ++ replicate compl eof
+
 solved9 = padr 20 '\x04' "YELLOW SUBMARINE" == "YELLOW SUBMARINE\x04\x04\x04\x04"
 
+unpadr p = dropWhileEnd (== p)
+
 -- 10
+eof = 4
+
 cbcDecode :: [Int] -> [Int] -> [Int]
-cbcDecode key txt = concat $ zipWith decode1 chunks (iv:chunks)
+cbcDecode key txt = unpadr eof $ concat $ zipWith decode1 chunks (iv:chunks)
     where
         blockSize = length key
         iv = replicate blockSize 0
-        chunks = chunksOf blockSize $ txt
+        chunks = chunksOf blockSize txt
         decode1 cipher vec =
-            let dec = aesEcbDecodeBits key cipher
+            let dec = ecbDecodeBits key cipher
             in zipWith xor dec vec
 
-solved10 =
-    let d = cbcDecode `on` fmap ord
-    in (chr <$> d "YELLOW SUBMARINE" cbcCipherText)
+
+cbcEncode :: [Int] -> [Int] -> [Int]
+cbcEncode key txt = concat $ tail $ scanl encode1 iv chunks
+    where
+        blockSize = length key
+        iv = replicate blockSize 0
+        chunks = chunksOf blockSize txt
+        encode1 prev chnk =
+            let enc = zipWith xor (padr blockSize eof chnk) prev
+            in ecbEncodeBits key enc
+
+cbcDecodeStr = fmap chr .: cbcDecode `on` fmap ord
+cbcEncodeStr = fmap chr .: cbcEncode `on` fmap ord
+
+solved10 = cbcDecodeStr "YELLOW SUBMARINE" cbcCipherText
+
+cbcIso = cbcDecodeStr "YELLOW SUBMARINE" (cbcEncodeStr "YELLOW SUBMARINE" solved10) == solved10
+
+-- 11
+chrGen = getStdRandom (randomR (0, 255))
+algoGen = do
+    idx <- getStdRandom (randomR (0, 1)) :: IO Int
+    return $ case idx of
+        0 -> traceShow "ECB" ecbEncodeBits
+        1 -> traceShow "CBC" cbcEncode
+
+randomBytes mn mx = do
+    len <- getStdRandom $ randomR (mn, mx)
+    replicateM len chrGen
+
+encryptionOracle keyLength plainText = do
+    key <- replicateM keyLength chrGen
+    -- print key
+    prefix <- randomBytes 5 10
+    suffix <- randomBytes 5 10
+    algo <- algoGen
+    let fullText = prefix ++ plainText ++ suffix
+        padded = padBlocks keyLength fullText
+    return $ algo key padded
+
+detect keyLength = do
+    let plainText = replicate (keyLength * 3) 0 
+    cipher <- encryptionOracle keyLength plainText
+    print $
+        if hasDuplicates keyLength cipher
+        then "ECB"
+        else "CBC"
