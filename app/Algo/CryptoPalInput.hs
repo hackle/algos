@@ -9,7 +9,14 @@ import Data.String
 
 decodeBase64Str = fmap BT.unpack . decode . fromString
 
-(Right cbcCipherText) = decodeBase64Str $ concat $ [
+(Right input12) = decodeBase64Str $ concat [
+    "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg"
+    ,"aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq"
+    ,"dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg"
+    ,"YnkK"
+    ]
+
+(Right cbcCipherText) = decodeBase64Str $ concat [
     "CRIwqt4+szDbqkNY+I0qbNXPg1XLaCM5etQ5Bt9DRFV/xIN2k8Go7jtArLIy"
     ,"P605b071DL8C+FPYSHOXPkMMMFPAKm+Nsu0nCBMQVt9mlluHbVE/yl6VaBCj"
     ,"NuOGvHZ9WYvt51uR/lklZZ0ObqD5UaC1rupZwCEK4pIWf6JQ4pTyPjyiPtKX"

@@ -28,6 +28,7 @@ import Data.Composition
 import System.Random
 import Control.Monad
 import Debug.Trace
+import GHC.Data.Maybe (fromJust)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -159,8 +160,10 @@ solved8 =
 padr l p xs =
     xs ++ replicate (l - length xs) p
 
+modComp x y = negate x `mod` y
+
 padBlocks blockSize xs =
-    let compl = negate (length xs) `mod` blockSize
+    let compl = length xs `modComp` blockSize
     in xs ++ replicate compl eof
 
 solved9 = padr 20 '\x04' "YELLOW SUBMARINE" == "YELLOW SUBMARINE\x04\x04\x04\x04"
@@ -220,10 +223,45 @@ encryptionOracle keyLength plainText = do
         padded = padBlocks keyLength fullText
     return $ algo key padded
 
-detect keyLength = do
-    let plainText = replicate (keyLength * 3) 0 
+detectAlgo keyLength = do
+    let plainText = replicate (keyLength * 3) 0
     cipher <- encryptionOracle keyLength plainText
     print $
         if hasDuplicates keyLength cipher
         then "ECB"
         else "CBC"
+
+-- 12
+
+hiddenKey keySize = replicateM keySize chrGen
+
+ecb12 key plainText =
+    let finalText = plainText ++ (ord <$> input12)
+    in ecbEncodeBits key (padBlocks (length key) finalText) -- this also works with cbc
+
+guessKeySize algo =
+    let xss = tail $ scanl (flip (:)) [] $ repeat 0
+        ciphers = algo <$> xss
+        (l1, l2) = head $ dropWhile (uncurry (==)) $ zipWith ((,) `on` length) ciphers (tail ciphers)
+    in abs $ l1 - l2
+
+guessSalt algo keySize known =
+    let knownBlockSize = keySize * (length known `div` keySize)
+        toFill = ((length known `modComp` keySize) - 1) `mod` keySize
+        toTakeForComparison = knownBlockSize + keySize
+        fillers = replicate toFill 0
+        mkGuess c = fillers ++ known ++ [c]
+        attempts = aside (take toTakeForComparison . algo . mkGuess) <$> [0..255]
+        good = take toTakeForComparison $ algo fillers
+        found = find ((== good) . snd) attempts
+    in (known++) . singleton . fst <$> found
+
+crackSalt plainText = do
+    keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
+    key <- hiddenKey keySize
+    let algo = ecb12 key
+        guessedKeySize = guessKeySize (ecb12 key)
+        guesser = guessSalt algo guessedKeySize
+        guessOn prev = maybe prev guessOn (guesser prev)
+        r = guessOn []
+    print (chr <$> unpadr 4 r)
