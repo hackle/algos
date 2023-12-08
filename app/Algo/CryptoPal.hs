@@ -262,5 +262,5 @@ crackSalt plainText = do
     key <- hiddenKey keySize
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
-        r = loop (guessSalt algo guessedKeySize) []
-    print (chr <$> unpadr 4 r)
+        salt = loop (guessSalt algo guessedKeySize) []
+    print (chr <$> unpadr 4 salt)
