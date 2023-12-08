@@ -32,6 +32,7 @@ executable algo
         , Algo.CatAndMouse
         , Algo.CryptoPal
         , Algo.CryptoPalInput
+        , Algo.CatAndMouse2
 
 
     -- LANGUAGE extensions used by modules in this package.
@@ -59,5 +60,6 @@ executable algo
         , cryptonite
         , composition
         , random
+        , transformers
     hs-source-dirs:   app
     default-language: Haskell2010
