@@ -29,6 +29,7 @@ import System.Random
 import Control.Monad
 import Debug.Trace
 import GHC.Data.Maybe (fromJust)
+import Control.Monad.Extra (loop)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -254,14 +255,12 @@ guessSalt algo keySize known =
         attempts = aside (take toTakeForComparison . algo . mkGuess) <$> [0..255]
         good = take toTakeForComparison $ algo fillers
         found = find ((== good) . snd) attempts
-    in (known++) . singleton . fst <$> found
+    in maybe (Right known) (Left . (known++) . singleton . fst) found
 
 crackSalt plainText = do
     keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
     key <- hiddenKey keySize
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
-        guesser = guessSalt algo guessedKeySize
-        guessOn prev = maybe prev guessOn (guesser prev)
-        r = guessOn []
+        r = loop (guessSalt algo guessedKeySize) []
     print (chr <$> unpadr 4 r)
