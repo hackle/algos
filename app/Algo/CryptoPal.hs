@@ -259,6 +259,6 @@ crackSalt plainText = do
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
         fillers = concat $ repeat ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
-        totalBlocks = length $ algo []
-        result = let known = zipWith (guessSalt algo) fillers ([]:known) in known !! totalBlocks
+        totalBytes = length $ algo []
+        result = let known = zipWith (guessSalt algo) fillers ([]:known) in known !! totalBytes
     print (chr <$> unpadr 4 result)
