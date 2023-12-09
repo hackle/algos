@@ -249,10 +249,9 @@ guessKeySize algo =
 guessSalt algo known (filler:fillers) =
     maybe known (\c -> guessSalt algo (known++[c]) fillers) found
     where
-        posFullBlocks = length filler + length known + 1
-        good = take posFullBlocks $ algo filler
-        mkGuess c = take posFullBlocks $ algo (filler ++ known ++ [c])
-        found = find ((== good) . mkGuess) [0..255]
+        found = find test [0..255]
+        test c = run filler == run (filler ++ known ++ [c])
+        run = take (length filler + length known + 1) . algo
 
 crackSalt plainText = do
     keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
