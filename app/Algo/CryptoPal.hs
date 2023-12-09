@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeApplications #-}
 
 module Algo.CryptoPal where
 
@@ -17,7 +17,7 @@ import Data.List
 import Data.Function
 import Data.Tuple.Extra
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
+import Data.Maybe (catMaybes, listToMaybe, mapMaybe, isJust)
 -- import Data.Text.Metrics (hamming)
 import GHC.Utils.Misc (fstOf3, sndOf3, thdOf3)
 import Crypto.Cipher.AES
@@ -29,7 +29,7 @@ import System.Random
 import Control.Monad
 import Debug.Trace
 import GHC.Data.Maybe (fromJust)
-import Control.Monad.Extra (loop)
+import Control.Monad.Extra (loop, pureIf)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -247,15 +247,13 @@ guessKeySize algo =
     in abs $ l1 - l2
 
 guessSalt algo keySize known =
-    let knownBlockSize = keySize * (length known `div` keySize)
+    let toTakeForComparison = keySize * ((length known `div` keySize) + 1)
         toFill = ((length known `modComp` keySize) - 1) `mod` keySize
-        toTakeForComparison = knownBlockSize + keySize
         fillers = replicate toFill 0
-        mkGuess c = fillers ++ known ++ [c]
-        attempts = aside (take toTakeForComparison . algo . mkGuess) <$> [0..255]
         good = take toTakeForComparison $ algo fillers
-        found = find ((== good) . snd) attempts
-    in maybe (Right known) (Left . (known++) . singleton . fst) found
+        mkGuess c = take toTakeForComparison $ algo (fillers ++ known ++ [c])
+        found = find ((== good) . mkGuess) [0..255]
+    in maybe (Right known) (Left . (known++) . singleton) found
 
 crackSalt plainText = do
     keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
