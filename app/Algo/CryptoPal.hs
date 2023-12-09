@@ -246,8 +246,8 @@ guessKeySize algo =
         (l1, l2) = head $ dropWhile (uncurry (==)) $ zipWith ((,) `on` length) ciphers (tail ciphers)
     in abs $ l1 - l2
 
-guessSalt algo known (filler:fillers) =
-    maybe known (\c -> guessSalt algo (known++[c]) fillers) found
+guessSalt algo filler known =
+    maybe known (\c -> known++[c]) found
     where
         found = find test [0..255]
         test c = run filler == run (filler ++ known ++ [c])
@@ -259,5 +259,6 @@ crackSalt plainText = do
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
         fillers = concat $ repeat ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
-        salt = guessSalt algo [] fillers
-    print (chr <$> unpadr 4 salt)
+        totalBlocks = length $ algo []
+        result = let known = zipWith (guessSalt algo) fillers ([]:known) in known !! totalBlocks
+    print (chr <$> unpadr 4 result)
