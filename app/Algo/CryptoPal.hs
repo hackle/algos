@@ -259,7 +259,7 @@ crackSalt plainText = do
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
         totalBytes = length $ algo []
-        fillers = take totalBytes $ concat $ repeat ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
+        fillers = take totalBytes $ cycle ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
         result1 = foldl (guessSalt algo) [] fillers
         -- alternatively, much fancier
         result2 = let known = zipWith (guessSalt algo) ([]:known) fillers in last known
