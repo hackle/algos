@@ -246,19 +246,19 @@ guessKeySize algo =
         (l1, l2) = head $ dropWhile (uncurry (==)) $ zipWith ((,) `on` length) ciphers (tail ciphers)
     in abs $ l1 - l2
 
-guessSalt algo keySize known =
-    let toTakeForComparison = keySize * ((length known `div` keySize) + 1)
-        toFill = ((length known `modComp` keySize) - 1) `mod` keySize
-        fillers = replicate toFill 0
-        good = take toTakeForComparison $ algo fillers
-        mkGuess c = take toTakeForComparison $ algo (fillers ++ known ++ [c])
+guessSalt algo keySize known (filler:fillers) =
+    maybe known (\c -> guessSalt algo keySize (known++[c]) fillers) found
+    where
+        posFullBlocks = length filler + length known + 1
+        good = take posFullBlocks $ algo filler
+        mkGuess c = take posFullBlocks $ algo (filler ++ known ++ [c])
         found = find ((== good) . mkGuess) [0..255]
-    in maybe (Right known) (Left . (known++) . singleton) found
 
 crackSalt plainText = do
     keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
     key <- hiddenKey keySize
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
-        salt = loop (guessSalt algo guessedKeySize) []
+        fillers = concat $ repeat ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
+        salt = guessSalt algo guessedKeySize [] fillers
     print (chr <$> unpadr 4 salt)
