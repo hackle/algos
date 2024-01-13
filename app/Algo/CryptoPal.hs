@@ -17,9 +17,9 @@ import Data.List
 import Data.Function
 import Data.Tuple.Extra
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, listToMaybe, mapMaybe, isJust)
+import Data.Maybe (catMaybes, listToMaybe, mapMaybe, isJust, fromMaybe)
 -- import Data.Text.Metrics (hamming)
-import GHC.Utils.Misc (fstOf3, sndOf3, thdOf3)
+import GHC.Utils.Misc (fstOf3, sndOf3, thdOf3, applyWhen)
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types
 import Crypto.Error
@@ -263,6 +263,32 @@ crackSalt plainText = do
         result1 = foldl (guessSalt algo) [] fillers
         -- alternatively, much fancier
         result2 = let known = zipWith (guessSalt algo) ([]:known) fillers in last known
-    
+
     print (chr <$> unpadr 4 result1)
     print (chr <$> unpadr 4 result2)
+
+-- 16
+cbc16 key plainText = cbcEncodeStr key $ prefix ++ sanitise plainText ++ suffix
+    where
+        masks = M.fromList [(';', '9'), ('=', '8')]
+        sanitise = map (\x -> fromMaybe x (x `M.lookup` masks))
+        prefix = "comment1=cooking%20MCs;userdata="
+        suffix = ";comment2=%20like%20a%20pound%20of%20bacon"
+
+
+
+flipBits c = chr $ 255 `xor` ord c
+flips = M.fromList $ concat [ let x1 = flipBits x in [(x, x1), (x1, flipBits x1)] | x <- [';', '='] ]
+
+injection :: String
+injection = "nice;admin=true;"
+safeInjection = (\x -> fromMaybe x (x `M.lookup` flips)) <$> injection
+
+crack16 plain =
+    let key = "YELLOW SUBMARINE"
+        cipher = cbc16 key plain
+        (b0:b1:bs) = chunksOf 16 cipher
+        targetIndice = [4,10,15]
+        danger = zipWith (\i x -> applyWhen (i `elem` targetIndice) flipBits x) [0..] b1
+        plain1 = cbcDecodeStr key (concat $ b0:danger:bs)
+    in plain1
