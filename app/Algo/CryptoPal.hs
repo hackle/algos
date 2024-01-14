@@ -163,9 +163,9 @@ padr l p xs =
 
 modComp x y = negate x `mod` y
 
-padBlocks blockSize xs =
+padBlocks pad blockSize xs =
     let compl = length xs `modComp` blockSize
-    in xs ++ replicate compl eof
+    in xs ++ replicate compl pad
 
 solved9 = padr 20 '\x04' "YELLOW SUBMARINE" == "YELLOW SUBMARINE\x04\x04\x04\x04"
 
@@ -174,33 +174,37 @@ unpadr p = dropWhileEnd (== p)
 -- 10
 eof = 4
 
-cbcDecode :: [Int] -> [Int] -> [Int]
-cbcDecode key txt = unpadr eof $ concat $ zipWith decode1 chunks (iv:chunks)
+cbcDecode :: [Int] -> [Int] -> [Int] -> [Int]
+cbcDecode iv key txt = unpadr eof $ concat $ zipWith decode1 chunks (iv:chunks)
     where
         blockSize = length key
-        iv = replicate blockSize 0
         chunks = chunksOf blockSize txt
         decode1 cipher vec =
             let dec = ecbDecodeBits key cipher
             in zipWith xor dec vec
 
 
-cbcEncode :: [Int] -> [Int] -> [Int]
-cbcEncode key txt = concat $ tail $ scanl encode1 iv chunks
+cbcEncode :: [Int] -> [Int] -> [Int] -> [Int]
+cbcEncode iv key txt = concat $ tail $ scanl encode1 iv chunks
     where
         blockSize = length key
-        iv = replicate blockSize 0
         chunks = chunksOf blockSize txt
         encode1 prev chnk =
             let enc = zipWith xor (padr blockSize eof chnk) prev
             in ecbEncodeBits key enc
 
-cbcDecodeStr = fmap chr .: cbcDecode `on` fmap ord
-cbcEncodeStr = fmap chr .: cbcEncode `on` fmap ord
+on3 :: (b -> b -> b -> c) -> (a -> b) -> a -> a -> a -> c
+on3 f g a0 a1 a2 =  f (g a0) (g a1) (g a2)
 
-solved10 = cbcDecodeStr "YELLOW SUBMARINE" cbcCipherText
+cbcDecodeStr = fmap chr .:. cbcDecode `on3` fmap ord
+cbcEncodeStr = fmap chr .:. cbcEncode `on3` fmap ord
 
-cbcIso = cbcDecodeStr "YELLOW SUBMARINE" (cbcEncodeStr "YELLOW SUBMARINE" solved10) == solved10
+myIV = "HANDSOME FELLOWS"
+myIVBits = ord <$> myIV
+
+solved10 = cbcDecodeStr myIV "YELLOW SUBMARINE" cbcCipherText
+
+cbcIso = cbcDecodeStr myIV "YELLOW SUBMARINE" (cbcEncodeStr myIV "YELLOW SUBMARINE" solved10) == solved10
 
 -- 11
 chrGen = getStdRandom (randomR (0, 255))
@@ -208,7 +212,7 @@ algoGen = do
     idx <- getStdRandom (randomR (0, 1)) :: IO Int
     return $ case idx of
         0 -> traceShow "ECB" ecbEncodeBits
-        1 -> traceShow "CBC" cbcEncode
+        1 -> traceShow "CBC" $ cbcEncode myIVBits
 
 randomBytes mn mx = do
     len <- getStdRandom $ randomR (mn, mx)
@@ -221,7 +225,7 @@ encryptionOracle keyLength plainText = do
     suffix <- randomBytes 5 10
     algo <- algoGen
     let fullText = prefix ++ plainText ++ suffix
-        padded = padBlocks keyLength fullText
+        padded = padBlocks eof keyLength fullText
     return $ algo key padded
 
 detectAlgo keyLength = do
@@ -238,7 +242,7 @@ hiddenKey keySize = replicateM keySize chrGen
 
 ecb12 key plainText =
     let finalText = plainText ++ (ord <$> input12)
-    in ecbEncodeBits key (padBlocks (length key) finalText) -- this also works with cbc
+    in ecbEncodeBits key (padBlocks eof (length key) finalText) -- this also works with cbc
 
 guessKeySize algo =
     let xss = tail $ scanl (flip (:)) [] $ repeat 0
@@ -278,17 +282,43 @@ cbc16 key plainText = cbcEncodeStr key $ prefix ++ sanitise plainText ++ suffix
 
 
 flipBits c = chr $ 255 `xor` ord c
-flips = M.fromList $ concat [ let x1 = flipBits x in [(x, x1), (x1, flipBits x1)] | x <- [';', '='] ]
+flippedChars = M.fromList [ aside flipBits x | x <- [';', '='] ]
 
-injection :: String
-injection = "nice;admin=true;"
-safeInjection = (\x -> fromMaybe x (x `M.lookup` flips)) <$> injection
+safeInjection = (\x -> fromMaybe x (x `M.lookup` flippedChars)) <$> ("nice;admin=true;" :: String)
 
 crack16 plain =
     let key = "YELLOW SUBMARINE"
-        cipher = cbc16 key plain
+        cipher = cbc16 myIV key plain
         (b0:b1:bs) = chunksOf 16 cipher
         targetIndice = [4,10,15]
         danger = zipWith (\i x -> applyWhen (i `elem` targetIndice) flipBits x) [0..] b1
         plain1 = cbcDecodeStr key (concat $ b0:danger:bs)
     in plain1
+
+-- 17
+pkcs7 xs blockSize = xs ++ padding
+    where padding = let m = blockSize - length xs `mod` blockSize in replicate m m 
+
+validPkcs7 [] = True
+validPkcs7 xs = 
+    let (x:xs') = reverse xs 
+    in ord x == 1 + length (takeWhile (== x) xs') 
+
+check17 iv key = toMaybe . cbcDecodeStr iv key
+    where toMaybe xs = if validPkcs7 xs then Just xs else Nothing
+
+guessByPadding cipher check = 
+    let attackIVs = (\x -> take 15 myIV ++ [chr x]) <$> [0..255]
+        attacks = check1 <$> attackIVs
+    in find (/= Nothing) attacks
+    where 
+        (c0:_) = chunksOf 16 cipher
+        check1 iv = check iv c0 
+
+crack17 = do
+    key <- hiddenKey 16
+    pIdx <- getStdRandom (randomR (0, 9))
+    let keyChars = chr <$> key
+        plain = padBlocks (chr eof) 16 (input17 !! pIdx)
+        cipher = cbcEncodeStr myIV keyChars plain
+    return $ guessByPadding cipher (`check17` keyChars)

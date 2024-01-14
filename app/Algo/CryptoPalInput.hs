@@ -6,8 +6,22 @@ import Data.ByteString.Base64 (encode, decode)
 import qualified Data.ByteString.Char8 as BT (unpack, pack)
 import qualified Data.Map as M
 import Data.String
+import Data.Either (fromRight)
 
 decodeBase64Str = fmap BT.unpack . decode . fromString
+
+input17 = fromRight "" . decodeBase64Str <$> [
+    "MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc="
+    ,"MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic="
+    ,"MDAwMDAyUXVpY2sgdG8gdGhlIHBvaW50LCB0byB0aGUgcG9pbnQsIG5vIGZha2luZw=="
+    ,"MDAwMDAzQ29va2luZyBNQydzIGxpa2UgYSBwb3VuZCBvZiBiYWNvbg=="
+    ,"MDAwMDA0QnVybmluZyAnZW0sIGlmIHlvdSBhaW4ndCBxdWljayBhbmQgbmltYmxl"
+    ,"MDAwMDA1SSBnbyBjcmF6eSB3aGVuIEkgaGVhciBhIGN5bWJhbA=="
+    ,"MDAwMDA2QW5kIGEgaGlnaCBoYXQgd2l0aCBhIHNvdXBlZCB1cCB0ZW1wbw=="
+    ,"MDAwMDA3SSdtIG9uIGEgcm9sbCwgaXQncyB0aW1lIHRvIGdvIHNvbG8="
+    ,"MDAwMDA4b2xsaW4nIGluIG15IGZpdmUgcG9pbnQgb2g="
+    ,"MDAwMDA5aXRoIG15IHJhZy10b3AgZG93biBzbyBteSBoYWlyIGNhbiBibG93"
+    ]
 
 (Right input12) = decodeBase64Str $ concat [
     "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg"
