@@ -34,6 +34,7 @@ executable algo
         , Algo.CryptoPalInput
         , Algo.CatAndMouse2
         , Algo.Scanz
+        , Algo.DC
 
 
     -- LANGUAGE extensions used by modules in this package.

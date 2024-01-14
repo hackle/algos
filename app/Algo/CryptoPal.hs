@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeApplications #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Algo.CryptoPal where
 
@@ -10,7 +10,7 @@ import Data.Hex
 import Data.String
 import qualified Data.ByteString.Char8 as BT (unpack, pack)
 import Numeric (showHex, readHex, showIntAtBase)
-import Data.List.Split
+import Data.List.Split hiding (sepBy, chunksOf)
 import qualified Data.Text as T (pack)
 import Data.Bits
 import Data.List
@@ -30,6 +30,9 @@ import Control.Monad
 import Debug.Trace
 import GHC.Data.Maybe (fromJust)
 import Control.Monad.Extra (loop, pureIf)
+import Text.Parsec hiding (eof)
+import Text.Parsec.Char hiding (eof)
+import Data.List.Extra (dropSuffix, chunksOf)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -163,19 +166,21 @@ padr l p xs =
 
 modComp x y = negate x `mod` y
 
-padBlocks pad blockSize xs =
+padBlocks :: Int -> a -> [a] -> [a]
+padBlocks blockSize filler xs =
     let compl = length xs `modComp` blockSize
-    in xs ++ replicate compl pad
+    in xs ++ replicate compl filler
 
 solved9 = padr 20 '\x04' "YELLOW SUBMARINE" == "YELLOW SUBMARINE\x04\x04\x04\x04"
 
 unpadr p = dropWhileEnd (== p)
 
 -- 10
-eof = 4
+eofMarker = 4
+eofMarkerChar = chr eofMarker
 
 cbcDecode :: [Int] -> [Int] -> [Int] -> [Int]
-cbcDecode iv key txt = unpadr eof $ concat $ zipWith decode1 chunks (iv:chunks)
+cbcDecode iv key txt = unpadr eofMarker $ concat $ zipWith decode1 chunks (iv:chunks)
     where
         blockSize = length key
         chunks = chunksOf blockSize txt
@@ -190,7 +195,7 @@ cbcEncode iv key txt = concat $ tail $ scanl encode1 iv chunks
         blockSize = length key
         chunks = chunksOf blockSize txt
         encode1 prev chnk =
-            let enc = zipWith xor (padr blockSize eof chnk) prev
+            let enc = zipWith xor (padr blockSize eofMarker chnk) prev
             in ecbEncodeBits key enc
 
 on3 :: (b -> b -> b -> c) -> (a -> b) -> a -> a -> a -> c
@@ -225,7 +230,7 @@ encryptionOracle keyLength plainText = do
     suffix <- randomBytes 5 10
     algo <- algoGen
     let fullText = prefix ++ plainText ++ suffix
-        padded = padBlocks eof keyLength fullText
+        padded = padBlocks keyLength eofMarker fullText
     return $ algo key padded
 
 detectAlgo keyLength = do
@@ -242,7 +247,7 @@ hiddenKey keySize = replicateM keySize chrGen
 
 ecb12 key plainText =
     let finalText = plainText ++ (ord <$> input12)
-    in ecbEncodeBits key (padBlocks eof (length key) finalText) -- this also works with cbc
+    in ecbEncodeBits key (padBlocks (length key) eofMarker finalText) -- this also works with cbc
 
 guessKeySize algo =
     let xss = tail $ scanl (flip (:)) [] $ repeat 0
@@ -257,19 +262,78 @@ guessSalt algo known filler =
         test c = run filler == run (filler ++ known ++ [c])
         run = take (length filler + length known + 1) . algo
 
-crackSalt plainText = do
+crack12 plainText = do
     keySize <- (* 16) <$> getStdRandom (randomR (1, 1)) -- lib doesn't work with 32 :(
     key <- hiddenKey keySize
     let algo = ecb12 key
         guessedKeySize = guessKeySize (ecb12 key)
-        totalBytes = length $ algo []
-        fillers = take totalBytes $ cycle ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
+        totalAttepmpts = traceShowId $ length $ algo []
+        fillers = take totalAttepmpts $ cycle ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
         result1 = foldl (guessSalt algo) [] fillers
         -- alternatively, much fancier
         result2 = let known = zipWith (guessSalt algo) ([]:known) fillers in last known
 
     print (chr <$> unpadr 4 result1)
     print (chr <$> unpadr 4 result2)
+
+-- 13
+kvParser :: Parsec String String (M.Map String String)
+kvParser = do
+    kvps <- pair `sepBy1` char '&'
+    return $ M.fromList kvps
+    where
+        pair = do
+            k <- many1 letter
+            char '='
+            v <- many1 letter
+            return (k, v)
+
+parseKvp = runParser kvParser "" "kvp"
+
+encodeKvps m = intercalate "&" $ fmap (\(a, b) -> a ++ "=" ++ b) m
+
+profileFor email = encodeKvps [("email", sanitise email), ("uid", "10"), ("role", "user")]
+    where
+        sanitise = filter (not . (`elem` ("&="::String)))
+
+isolateUser blockSize = replicate padBlock0 '\x04' ++ padr blockSize '\x04' "admin" ++ replicate padBlock2 '\x04'
+    where
+        padBlock0 = blockSize - length ("email="::String)
+        padBlock2 = padSize - padBlock0
+        bareBone = profileFor ""
+        formatSize = length ("email=&"::String)
+        padSize = blockSize - length (dropSuffix "user" bareBone) `mod` blockSize
+
+hackIt13 secret =
+    let [b0, b1, b2, b3] = chunksOf 16 $ ecbEncode (chr <$> secret) $ padBlocks 16 eofMarkerChar $ profileFor $ isolateUser 16
+    in ecbDecode (chr <$> secret) $ concat [b0, b2, b1]
+
+ecbCutPaste = do
+    secret <- hiddenKey 16
+    let hacked = hackIt13 secret
+    putStrLn hacked
+
+-- 14
+
+ecb14 prefix key plainText =
+    let finalText = prefix ++ plainText ++ (ord <$> input12)
+    in ecbEncodeBits key (padBlocks (length key) eofMarker finalText) -- this also works with cbc
+
+crack14 plainText = do
+    let keySize = 16 -- lib doesn't work with 32 :(
+    prefixSize <- getStdRandom (randomR (1, 16))
+    key <- hiddenKey keySize
+    prefix <- hiddenKey prefixSize
+    let algo = ecb14 prefix key
+        guessedKeySize = guessKeySize algo
+        padSize = head $ filter (\x -> hasDuplicates guessedKeySize $ algo (replicate (x + guessedKeySize * 2) eofMarker)) [0..guessedKeySize]
+        padding = replicate padSize eofMarker
+        totalAttempts = length (algo padding) - guessedKeySize
+        fillers = take totalAttempts $ cycle ((`replicate` 1) <$> reverse [0..(guessedKeySize - 1)])
+        padAlgo xs = drop guessedKeySize $ algo (padding ++ xs)
+        result1 = foldl (guessSalt padAlgo) [] fillers
+
+    print (chr <$> unpadr 4 result1)
 
 -- 16
 cbc16 key plainText = cbcEncodeStr key $ prefix ++ sanitise plainText ++ suffix
@@ -322,3 +386,5 @@ crack17 = do
         plain = padBlocks (chr eof) 16 (input17 !! pIdx)
         cipher = cbcEncodeStr myIV keyChars plain
     return $ guessByPadding cipher (`check17` keyChars)
+    print (chr <$> unpadr 4 result1)
+    print (chr <$> unpadr 4 result2)
