@@ -180,7 +180,7 @@ eofMarker = 4
 eofMarkerChar = chr eofMarker
 
 cbcDecode :: [Int] -> [Int] -> [Int] -> [Int]
-cbcDecode iv key txt = unpadr eofMarker $ concat $ zipWith decode1 chunks (iv:chunks)
+cbcDecode iv key txt = concat $ zipWith decode1 chunks (iv:chunks)
     where
         blockSize = length key
         chunks = chunksOf blockSize txt
@@ -369,35 +369,33 @@ validPkcs7 xs =
     in ord x == 1 + length (takeWhile (== x) xs')
 
 check17 iv key ys = toMaybe $ cbcDecodeStr iv key ys
-    where 
-        toMaybe xs = if length xs `mod` 16 == 0 && validPkcs7 xs then traceShow (ys ++ "|" ++ xs) Just xs else Nothing
+    where
+        toMaybe xs = if validPkcs7 xs then Just xs else Nothing
 
 zipRightWith f = reverse .: (zipWith f `on` reverse)
 xorChr = xor `on` ord
 
-guessByPadding cipher check known =
-    let prev = take idx myIV
-        paddingLen = length known + 1
-        idx = 16 - paddingLen
-        mkIV x = prev ++ [chr x] ++ zipRightWith (\a b -> chr $ (a `xorChr` b) `xor` paddingLen) known myIV
-        attackIVs = aside mkIV <$> [0..255]
-        attacks = fmap check1 <$> attackIVs
-        founds = filter (isJust . snd) attacks
-        match = fst . head $ traceShowId founds
-    in
-        if length (traceShowId known) == 16
-            then known
-            else
-                let cur = chr $ (traceShowId match) `xor` paddingLen `xor` ord (myIV !! idx)
-                in guessByPadding cipher check (cur:known)
-    where
-        (c0:_) = chunksOf 16 cipher
-        check1 iv = check iv c0
+guessByPadding iv cipher check =
+    foldr go [] [0..15]
+    where 
+        go idx known =
+            let prev = take idx iv
+                paddingLen = 16 - idx
+                mkIV x = prev ++ [chr x] ++ zipRightWith (\a b -> chr $ a `xorChr` b `xor` paddingLen) known iv
+                attackIVs = aside mkIV <$> [0..255]
+                match = find (const True) [ x | (x, iv) <- attackIVs, isJust (check1 iv) ]
+            in 
+                case match of 
+                    Nothing -> known
+                    Just x -> let n = chr $ x `xor` paddingLen `xor` ord (iv !! idx) in n:known
+        check1 iv = check iv cipher
 
 crack17 = do
     key <- hiddenKey 16
-    pIdx <- getStdRandom (randomR (0, 0))
+    pIdx <- getStdRandom (randomR (0, 9))
     let keyChars = chr <$> key
-        plain = padBlocks (chr eof) 16 (input17 !! pIdx)
-        cipher = cbcEncodeStr myIV keyChars plain
-    return $ guessByPadding cipher (`check17` keyChars) []
+        plain = padBlocks 16 '\x17' (input17 !! pIdx)
+        ciphers = chunksOf 16 $ cbcEncodeStr myIV keyChars plain
+        guess1 iv cipher = guessByPadding iv cipher (`check17` keyChars)
+        pairs = zipWith guess1 (myIV:ciphers) ciphers
+    putStr $ concat pairs
