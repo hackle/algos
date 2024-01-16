@@ -381,7 +381,9 @@ guessByPadding check iv cipher =
         go idx known =
             let prev = take idx iv
                 paddingLen = 16 - idx
-                mkIV x = prev ++ [chr x] ++ zipRightWith (\a b -> chr $ a `xorChr` b `xor` paddingLen) known iv
+                -- reverse-engineers padding into IV, so the pkcs validation will pass
+                padding = zipRightWith (\a b -> chr $ a `xorChr` b `xor` paddingLen) known iv
+                mkIV x = prev ++ [chr x] ++ padding
                 attackIVs = aside mkIV <$> [0..255]
                 match = find (const True) [ x | (x, iv) <- attackIVs, isJust (check1 iv) ]
             in
