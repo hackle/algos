@@ -394,7 +394,7 @@ crack17 = do
     key <- hiddenKey 16
     pIdx <- getStdRandom (randomR (0, 9))
     let keyChars = chr <$> key
-        plain = padBlocks 16 '\x17' (input17 !! pIdx)
+        plain = padBlocks 16 '\x17' (input17 !! pIdx)   -- 17 because pkcs can go up to 16
         ciphers = chunksOf 16 $ cbcEncodeStr myIV keyChars plain
         guess1 = guessByPadding (`check17` keyChars)
     putStr $ concat $ zipWith guess1 (myIV:ciphers) ciphers
