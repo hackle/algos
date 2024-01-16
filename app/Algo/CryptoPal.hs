@@ -375,17 +375,17 @@ check17 iv key ys = toMaybe $ cbcDecodeStr iv key ys
 zipRightWith f = reverse .: (zipWith f `on` reverse)
 xorChr = xor `on` ord
 
-guessByPadding iv cipher check =
+guessByPadding check iv cipher =
     foldr go [] [0..15]
-    where 
+    where
         go idx known =
             let prev = take idx iv
                 paddingLen = 16 - idx
                 mkIV x = prev ++ [chr x] ++ zipRightWith (\a b -> chr $ a `xorChr` b `xor` paddingLen) known iv
                 attackIVs = aside mkIV <$> [0..255]
                 match = find (const True) [ x | (x, iv) <- attackIVs, isJust (check1 iv) ]
-            in 
-                case match of 
+            in
+                case match of
                     Nothing -> known
                     Just x -> let n = chr $ x `xor` paddingLen `xor` ord (iv !! idx) in n:known
         check1 iv = check iv cipher
@@ -396,6 +396,5 @@ crack17 = do
     let keyChars = chr <$> key
         plain = padBlocks 16 '\x17' (input17 !! pIdx)
         ciphers = chunksOf 16 $ cbcEncodeStr myIV keyChars plain
-        guess1 iv cipher = guessByPadding iv cipher (`check17` keyChars)
-        pairs = zipWith guess1 (myIV:ciphers) ciphers
-    putStr $ concat pairs
+        guess1 = guessByPadding (`check17` keyChars)
+    putStr $ concat $ zipWith guess1 (myIV:ciphers) ciphers
