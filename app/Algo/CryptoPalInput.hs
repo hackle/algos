@@ -10,6 +10,8 @@ import Data.Either (fromRight)
 
 decodeBase64Str = fmap BT.unpack . decode . fromString
 
+input18 = fromRight "" $ decodeBase64Str "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=="
+
 input17 = fromRight "" . decodeBase64Str <$> [
     "MDAwMDAwTm93IHRoYXQgdGhlIHBhcnR5IGlzIGp1bXBpbmc="
     ,"MDAwMDAxV2l0aCB0aGUgYmFzcyBraWNrZWQgaW4gYW5kIHRoZSBWZWdhJ3MgYXJlIHB1bXBpbic="

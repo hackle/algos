@@ -33,6 +33,9 @@ import Control.Monad.Extra (loop, pureIf)
 import Text.Parsec hiding (eof)
 import Text.Parsec.Char hiding (eof)
 import Data.List.Extra (dropSuffix, chunksOf)
+import Data.Binary.Builder
+import Data.ByteString.Builder
+import Data.ByteString.Lazy.Char8 (unpack)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -368,9 +371,9 @@ validPkcs7 xs =
     let (x:xs') = reverse xs
     in ord x == 1 + length (takeWhile (== x) xs')
 
-check17 iv key ys = toMaybe $ cbcDecodeStr iv key ys
-    where
-        toMaybe xs = if validPkcs7 xs then Just xs else Nothing
+check17 iv key ys =
+    let x = cbcDecodeStr iv key ys
+    in pureIf (validPkcs7 x) x
 
 zipRightWith f = reverse .: (zipWith f `on` reverse)
 xorChr = xor `on` ord
@@ -400,3 +403,16 @@ crack17 = do
         ciphers = chunksOf 16 $ cbcEncodeStr myIV keyChars plain
         guess1 = guessByPadding (`check17` keyChars)
     putStr $ concat $ zipWith guess1 (myIV:ciphers) ciphers
+
+-- 18
+
+toLE :: Int -> [Char]
+toLE n = unpack $ toLazyByteString (int64LE $ fromInteger $ toInteger n)
+
+keyStream :: [Char] -> Int -> [Char]
+keyStream key nonce = concatMap (ecbEncode key . (toLE nonce ++)) (toLE <$> [0..])
+
+ctrStreamEncode :: [Char] -> Int -> [Char] -> [Int]
+ctrStreamEncode key nonce plain = zipWith xor (ord <$> plain) (ord <$> keyStream key nonce)
+
+crack18 = chr <$> ctrStreamEncode "YELLOW SUBMARINE" 0 input18

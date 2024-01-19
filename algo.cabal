@@ -63,5 +63,6 @@ executable algo
         , composition
         , random
         , transformers
+        , binary
     hs-source-dirs:   app
     default-language: Haskell2010
