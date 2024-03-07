@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeApplications #-}
 
 module Algo.CryptoPal where
 
@@ -428,11 +428,11 @@ crack18 = chr <$> ctrStreamEncode "YELLOW SUBMARINE" 0 input18
 data MTGen = MTGen [Word32] Int
 
 
-shiftAnds = [
-    (11, 0xffffffff)
-    ,(7, 0x9d2c5680)
-    ,(15, 0xefc60000)
-    , (18, 1)
+twists = [
+    \y -> y `xor` (y `shiftR` 11)
+    ,\y -> y `xor` (y `shiftL` 7 .&. 0x9d2c5680)
+    ,\y -> y `xor` (y `shiftL` 15 .&. 0xefc60000)
+    ,\y -> y `xor` (y `shiftR` 18)
     ]
 
 initialize :: Word32 -> MTGen
@@ -448,15 +448,14 @@ extract = do
     put $ MTGen list' (i + 1)
     return $ temper (list !! i)
   where
-    shifts = (\(u, d) y -> y `shiftR` u .&. d) <$> shiftAnds
-    temper y = foldl (\y1 f -> let y2 = f y1 in y2 `xor` y1) y shifts
+    temper y = foldl (&) y twists
     generate (x:xs) =
         x .&. upperMask + (xs !! (n - m)) `xor` (if testBit x (w - 1) then a else 0) : xs
     upperMask = shiftL (complement 0) r
     a = 0x9908b0df
     (w, n, m, r) = (32, 624, 397, 31)
 
-extractN s n = last $ evalState (replicateM n extract) (initialize s)
+extractN s n = evalState (replicateM n extract) (initialize s)
 
 -- 22
 waitRand = getStdRandom (randomR (1, 10))
@@ -465,7 +464,31 @@ crackSeed = do
     n <- waitRand
     putStrLn $ "Sleeping for seconds " ++ show n
     sleep n
-    let secret = extractN (floor seed) 1
+    let secret = extract1 (floor seed)
     nowP <- getPOSIXTime
-    let found = find (\s1 -> secret == extractN (floor nowP - s1) 1) [1..100]
+    let found = find (\s1 -> secret == extract1 (floor nowP - s1)) [1..100]
     print $ (floor nowP -) <$> found
+    where extract1 s = last $ extractN s 1
+
+maxN :: Double
+maxN = 2 ^ 32 - 1
+
+isUniform s n = do
+    let topN = extractN s n
+        normalised = floor . ((fromInteger . toInteger $ n) *). (/ maxN) . fromInteger . toInteger <$> topN
+    print normalised
+
+-- not the best in distribution
+distribution :: Int -> IO ()
+distribution n = do
+    let mw = maxBound :: Word32
+        range = [0, mw `div` (fromInteger . toInteger $ n) .. mw ]
+    mapM_ (`isUniform` n) range
+
+-- ghci> distribution 5
+-- [0,0,1,3,0]
+-- [0,1,3,0,4]
+-- [0,2,3,2,3]
+-- [2,2,1,1,0]
+-- [2,2,1,3,3]
+-- [2,4,0,0,3]
