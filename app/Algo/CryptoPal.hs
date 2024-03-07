@@ -30,12 +30,19 @@ import Control.Monad
 import Debug.Trace
 import GHC.Data.Maybe (fromJust)
 import Control.Monad.Extra (loop, pureIf)
-import Text.Parsec hiding (eof)
+import Text.Parsec hiding (eof, State)
 import Text.Parsec.Char hiding (eof)
 import Data.List.Extra (dropSuffix, chunksOf)
 import Data.Binary.Builder
 import Data.ByteString.Builder
 import Data.ByteString.Lazy.Char8 (unpack)
+import Data.Int
+import Data.Word
+import System.Random
+import Control.Monad.State (get, put, runState, State, evalState)
+import GHC.Utils.Misc (nTimes)
+import Data.Time.Clock.POSIX (getPOSIXTime)
+import System.Time.Extra (sleep)
 
 toHex c2 = let [(n, _)] = readHex c2 in n
 
@@ -410,9 +417,55 @@ toLE :: Int -> [Char]
 toLE n = unpack $ toLazyByteString (int64LE $ fromInteger $ toInteger n)
 
 keyStream :: [Char] -> Int -> [Char]
-keyStream key nonce = concatMap (ecbEncode key . (toLE nonce ++)) (toLE <$> [0..])
+keyStream key nonce = concatMap ((ecbEncode key . (toLE nonce ++)) . toLE) [0..]
 
 ctrStreamEncode :: [Char] -> Int -> [Char] -> [Int]
 ctrStreamEncode key nonce plain = zipWith xor (ord <$> plain) (ord <$> keyStream key nonce)
 
 crack18 = chr <$> ctrStreamEncode "YELLOW SUBMARINE" 0 input18
+
+-- 21
+data MTGen = MTGen [Word32] Int
+
+
+shiftAnds = [
+    (11, 0xffffffff)
+    ,(7, 0x9d2c5680)
+    ,(15, 0xefc60000)
+    , (18, 1)
+    ]
+
+initialize :: Word32 -> MTGen
+initialize seed = MTGen (iterate twist seed) 0
+  where 
+    twist x = f * (x `xor` (x `shiftR` 30)) + 1
+    f = 1812433253
+
+extract :: State MTGen Word32
+extract = do
+    (MTGen list i) <- get
+    let list' = if i + 1 == 624 then generate list else list
+    put $ MTGen list' (i + 1)
+    return $ temper (list !! i)
+  where
+    shifts = (\(u, d) y -> y `shiftR` u .&. d) <$> shiftAnds
+    temper y = foldl (\y1 f -> let y2 = f y1 in y2 `xor` y1) y shifts
+    generate (x:xs) =
+        x .&. upperMask + (xs !! (n - m)) `xor` (if testBit x (w - 1) then a else 0) : xs
+    upperMask = shiftL (complement 0) r
+    a = 0x9908b0df
+    (w, n, m, r) = (32, 624, 397, 31)
+
+extractN s n = last $ evalState (replicateM n extract) (initialize s)
+
+-- 22
+waitRand = getStdRandom (randomR (1, 10))
+crackSeed = do
+    seed <- getPOSIXTime
+    n <- waitRand
+    putStrLn $ "Sleeping for seconds " ++ show n
+    sleep n
+    let secret = extractN (floor seed) 1
+    nowP <- getPOSIXTime
+    let found = find (\s1 -> secret == extractN (floor nowP - s1) 1) [1..100]
+    print $ (floor nowP -) <$> found
